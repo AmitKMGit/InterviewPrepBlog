@@ -3,7 +3,8 @@
 A static, responsive notebook made with plain HTML, CSS, and JavaScript. It has
 editable notes, search, formatting and code blocks. The browser saves edits
 immediately. Optional GitHub sync stores a queued snapshot in Cloudflare and
-publishes it to GitHub Pages every 5 minutes.
+queues edits after 30 seconds without typing and publishes them to GitHub Pages
+on Cloudflare's one-minute schedule.
 
 > **Privacy:** when GitHub sync is enabled, note titles and contents are
 > committed to this repository and served publicly by GitHub Pages. Do not put
@@ -27,9 +28,10 @@ repository.
 ## Enable cross-device GitHub sync
 
 Sync uses a Cloudflare Worker as a small OAuth/API backend. GitHub credentials
-stay in Worker secrets, not in the website. Edits are queued shortly after
-they are made; the Worker commits the latest snapshot and requests a Pages
-deployment on its 5-minute schedule. The static site remains usable locally
+stay in Worker secrets, not in the website. After 30 seconds without typing,
+the browser queues edits; the Worker commits the latest snapshot and requests a
+Pages deployment on its one-minute schedule. Cloudflare cron cannot run every
+30 seconds. The static site remains usable locally
 without this setup.
 
 ### 1. Create the Cloudflare KV namespace
@@ -64,17 +66,19 @@ From the `worker` directory, deploy the Worker:
 npx wrangler deploy
 ```
 
-Note its `workers.dev` URL. The Worker can be deployed before adding OAuth
-secrets; sign-in will work after the next steps.
+The deployed Worker URL for this notebook is
+`https://personal-notebook-sync.amitkmgit-notebook.workers.dev`. The Worker can
+be deployed before adding OAuth secrets; sign-in will work after the next
+steps.
 
 ### 4. Create a GitHub OAuth App
 
 In GitHub, open **Settings → Developer settings → OAuth Apps → New OAuth App**.
 Set the homepage URL to the Pages URL above. Set its authorization callback URL
-to the callback on the URL from the previous step:
+to:
 
 ```text
-https://YOUR-WORKER.YOUR-SUBDOMAIN.workers.dev/api/auth/callback
+https://personal-notebook-sync.amitkmgit-notebook.workers.dev/api/auth/callback
 ```
 
 Copy the OAuth App's Client ID and Client Secret; do not add either value to
@@ -91,15 +95,15 @@ npx wrangler secret put GITHUB_CLIENT_SECRET
 npx wrangler deploy
 ```
 
-The Worker enables the configured `*/5 * * * *` cron trigger.
+The Worker enables the configured `*/1 * * * *` cron trigger (once per minute).
 
 ### 6. Point the site at the Worker
 
 Set `window.NOTEBOOK_SYNC_API` in `site/sync-config.js` to the deployed Worker
-URL, for example:
+URL:
 
 ```js
-window.NOTEBOOK_SYNC_API = "https://personal-notebook-sync.example.workers.dev";
+window.NOTEBOOK_SYNC_API = "https://personal-notebook-sync.amitkmgit-notebook.workers.dev";
 ```
 
 Push this change to `main` and wait for the Pages workflow to finish. Open the
@@ -111,8 +115,8 @@ other devices; editing requires connecting that account.
 
 - Each edit is saved to browser storage immediately.
 - When connected, the latest full notebook snapshot is sent to Cloudflare after
-  a short pause in typing.
-- Cloudflare retains the queued snapshot and, every 5 minutes, commits it to
+  30 seconds without typing.
+- Cloudflare retains the queued snapshot and, every minute, commits it to
   `site/notes.json` and dispatches the Pages deployment workflow.
 - A browser closed before the short queue request completes leaves that last
   edit only in that browser's local storage until it is reopened and connected.

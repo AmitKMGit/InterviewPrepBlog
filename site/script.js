@@ -23,6 +23,7 @@
   const drawerScrim = document.querySelector("#drawer-scrim");
   const toast = document.querySelector("#toast");
   const syncApi = (window.NOTEBOOK_SYNC_API || "").replace(/\/+$/, "");
+  const SYNC_DELAY_MS = 30_000;
   const syncPanel = document.querySelector("#sync-panel");
   const syncStatus = document.querySelector("#sync-status");
   const syncButton = document.querySelector("#sync-button");
@@ -145,13 +146,13 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ notes })
           });
-          setSyncStatus("Queued · GitHub publishes every 5 minutes");
+          setSyncStatus("Queued · GitHub publishes every minute");
         } catch (error) {
           console.error("Could not queue notebook sync.", error);
           setSyncStatus("Sync failed · your browser copy is saved");
           showToast(error.message);
         }
-      }, 1200);
+      }, SYNC_DELAY_MS);
     }
 
     function chooseNoteAfterSync() {
@@ -239,7 +240,7 @@
         localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
         syncReady = true;
         chooseNoteAfterSync();
-        setSyncStatus(remote.pending ? "Queued · GitHub publishes every 5 minutes" : "Connected · notes are published");
+        setSyncStatus(remote.pending ? "Queued · GitHub publishes every minute" : "Connected · notes are published");
         if (differs) scheduleSync();
       } catch (error) {
         console.error("Could not initialize notebook sync.", error);

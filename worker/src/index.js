@@ -118,7 +118,7 @@ async function queueNotes(request, env) {
     notes: body.notes,
     queuedAt: new Date().toISOString()
   }));
-  return jsonResponse({ queued: true, message: "Queued for the next 5-minute GitHub publish." }, 202, corsHeaders(request, env));
+  return jsonResponse({ queued: true, message: "Queued for the next scheduled GitHub publish." }, 202, corsHeaders(request, env));
 }
 
 async function startLogin(request, env) {
