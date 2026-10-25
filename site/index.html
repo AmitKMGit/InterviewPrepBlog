@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#faf9f4">
+    <meta name="theme-color" content="#20252b" media="(prefers-color-scheme: dark)">
+    <meta name="description" content="A personal digital notebook for everyday thoughts.">
+    <title>Notebook</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./style.css">
+    <script src="./sync-config.js"></script>
+    <script src="./script.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell" id="app-shell">
+      <button class="drawer-scrim" id="drawer-scrim" type="button" aria-label="Close notes menu" hidden></button>
+      <aside class="sidebar" id="sidebar" aria-label="Notebook pages">
+        <button class="add-button" id="add-button" type="button"><span aria-hidden="true">+</span> ADD</button>
+        <section class="sync-panel" id="sync-panel" aria-label="GitHub sync" hidden>
+          <p class="sync-status" id="sync-status">Not connected</p>
+          <button class="sync-button" id="sync-button" type="button">Connect GitHub</button>
+        </section>
+        <label class="search-box">
+          <span aria-hidden="true">⌕</span>
+          <span class="visually-hidden">Search note titles</span>
+          <input id="search-input" type="search" placeholder="Search titles…" autocomplete="off">
+        </label>
+        <nav class="note-list" id="note-list" aria-label="Notes"></nav>
+        <p class="list-empty" id="list-empty" hidden>No notes found.</p>
+      </aside>
+
+      <main class="notebook">
+        <header class="mobile-bar">
+          <button class="menu-button" id="menu-button" type="button" aria-label="Open notes menu" aria-expanded="false">☰</button>
+          <span>NOTEBOOK</span>
+        </header>
+        <section class="page" aria-label="Selected note">
+          <div class="format-toolbar" role="toolbar" aria-label="Text formatting">
+            <div class="toolbar-group font-group">
+              <div class="font-controls">
+                <label class="toolbar-select">
+                  <span class="visually-hidden">Font style</span>
+                  <select id="font-family" aria-label="Font style" title="Font style">
+                    <option value="Georgia">Georgia</option>
+                    <option value="Arial">Arial</option>
+                    <option value="Courier New">Courier New</option>
+                    <option value="cursive">Cursive</option>
+                  </select>
+                </label>
+                <label class="toolbar-select size-select">
+                  <span class="visually-hidden">Font size</span>
+                  <select id="font-size" aria-label="Font size" title="Font size">
+                    <option value="2">12</option>
+                    <option value="3" selected>16</option>
+                    <option value="4">18</option>
+                    <option value="5">24</option>
+                    <option value="6">32</option>
+                    <option value="7">48</option>
+                  </select>
+                </label>
+                <div class="size-buttons" aria-label="Adjust font size">
+                  <button class="format-button size-button" id="decrease-size" type="button" aria-label="Decrease font size" title="Decrease font size">A<sup>−</sup></button>
+                  <button class="format-button size-button" id="increase-size" type="button" aria-label="Increase font size" title="Increase font size">A<sup>+</sup></button>
+                </div>
+              </div>
+              <span class="group-caption">Font</span>
+            </div>
+            <div class="toolbar-group style-group">
+              <div class="style-buttons">
+                <button class="format-button" id="bold-button" type="button" aria-label="Bold" aria-pressed="false" title="Bold"><strong>B</strong></button>
+                <button class="format-button italic-button" id="italic-button" type="button" aria-label="Italic / cursive" aria-pressed="false" title="Italic / cursive"><em>I</em></button>
+              </div>
+              <span class="group-caption">Style</span>
+            </div>
+            <div class="toolbar-group code-group">
+              <div class="style-buttons">
+                <button class="format-button code-button" id="code-button" type="button" aria-label="Insert code block" title="Insert code block">&lt;/&gt;</button>
+              </div>
+              <span class="group-caption">Code</span>
+            </div>
+          </div>
+          <header class="page-heading">
+            <h1 id="note-title" contenteditable="false" aria-readonly="true" role="textbox" aria-label="Note title" aria-multiline="false" data-placeholder="Select or add a note" spellcheck="false"></h1>
+          </header>
+          <section class="page-writing" aria-label="Note content">
+            <div class="page-content" id="note-content" contenteditable="false" aria-readonly="true" role="textbox" aria-label="Note content" aria-multiline="true" data-placeholder="Your page is ready…" spellcheck="false"></div>
+          </section>
+        </section>
+      </main>
+      <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    </div>
+  </body>
+</html>
