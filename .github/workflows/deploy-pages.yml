@@ -3,10 +3,6 @@ name: Deploy personal notebook to GitHub Pages
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - "site/notes.json"
-  repository_dispatch:
-    types: [notes-updated]
   workflow_dispatch:
 
 permissions:

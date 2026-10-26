@@ -22,22 +22,11 @@
   const menuButton = document.querySelector("#menu-button");
   const drawerScrim = document.querySelector("#drawer-scrim");
   const toast = document.querySelector("#toast");
-  const syncApi = (window.NOTEBOOK_SYNC_API || "").replace(/\/+$/, "");
-  const SYNC_DELAY_MS = 60_000;
-  const syncPanel = document.querySelector("#sync-panel");
-  const syncStatus = document.querySelector("#sync-status");
-  const syncButton = document.querySelector("#sync-button");
-  const SESSION_KEY = "margin.notebook.session.v1";
 
   let notes = loadNotes();
   let selectedId = null;
   let toastTimer;
   let savedRange = null;
-  let syncToken = sessionStorage.getItem(SESSION_KEY) || "";
-  let syncTimer;
-  let syncReady = false;
-  let lastSyncedFingerprint = null;
-  let canEdit = !syncApi;
 
   function loadNotes() {
     try {
@@ -67,208 +56,6 @@
       return [];
     }
   }
-
-    function setCanEdit(enabled) {
-      canEdit = enabled;
-      addButton.disabled = !enabled;
-      shell.classList.toggle("sync-locked", !enabled);
-      if (selectedId) {
-        titleField.contentEditable = String(enabled);
-        contentField.contentEditable = String(enabled);
-        titleField.setAttribute("aria-readonly", String(!enabled));
-        contentField.setAttribute("aria-readonly", String(!enabled));
-      }
-      setFormattingEnabled(Boolean(selectedId && enabled));
-      renderList();
-    }
-
-    function normalizeNote(note) {
-      return {
-        id: note.id,
-        title: note.title,
-        content: sanitizeRichText(note.content),
-        updatedAt: typeof note.updatedAt === "string" ? note.updatedAt : ""
-      };
-    }
-
-    function mergeNotes(remoteNotes, localNotes) {
-      const merged = new Map(remoteNotes.map((note) => [note.id, normalizeNote(note)]));
-      const order = remoteNotes.map((note) => note.id);
-      for (const localNote of localNotes) {
-        const local = normalizeNote(localNote);
-        const remote = merged.get(local.id);
-        const localTime = Date.parse(local.updatedAt) || 0;
-        const remoteTime = remote ? Date.parse(remote.updatedAt) || 0 : -1;
-        if (!remote) order.unshift(local.id);
-        if (!remote || localTime >= remoteTime) merged.set(local.id, local);
-      }
-      return order.map((id) => merged.get(id)).filter(Boolean);
-    }
-
-    async function requestSync(path, options = {}) {
-      const response = await fetch(`${syncApi}${path}`, {
-        ...options,
-        headers: {
-          ...(options.headers || {}),
-          ...(syncToken ? { Authorization: `Bearer ${syncToken}` } : {})
-        }
-      });
-      let result;
-      try {
-        result = await response.json();
-      } catch {
-        throw new Error("The sync service returned an invalid response.");
-      }
-      if (!response.ok) {
-        if (response.status === 401) {
-          syncToken = "";
-          sessionStorage.removeItem(SESSION_KEY);
-          syncReady = false;
-          window.clearTimeout(syncTimer);
-          setCanEdit(false);
-          syncButton.textContent = "Connect GitHub";
-          syncStatus.textContent = "Session expired. Connect again to edit.";
-        }
-        throw new Error(result.error || `Sync failed (${response.status}).`);
-      }
-      return result;
-    }
-
-    function setSyncStatus(message) {
-      if (syncStatus) syncStatus.textContent = message;
-    }
-
-    function scheduleSync() {
-      const fingerprint = notesFingerprint();
-      if (fingerprint === lastSyncedFingerprint) {
-        window.clearTimeout(syncTimer);
-        setSyncStatus("Connected · no pending changes");
-        return;
-      }
-
-      window.clearTimeout(syncTimer);
-      setSyncStatus("Saved here · sync in 1 minute if unchanged");
-      syncTimer = window.setTimeout(async () => {
-        const latestFingerprint = notesFingerprint();
-        if (latestFingerprint === lastSyncedFingerprint) return;
-
-        try {
-          await requestSync("/api/notes", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ notes })
-          });
-          lastSyncedFingerprint = latestFingerprint;
-          setSyncStatus("Queued · publishing on the next minute schedule");
-        } catch (error) {
-          console.error("Could not queue notebook sync.", error);
-          setSyncStatus("Sync failed · your browser copy is saved");
-          showToast(error.message);
-        }
-      }, SYNC_DELAY_MS);
-    }
-
-    function notesFingerprint() {
-      return JSON.stringify(notes.map(({ id, title, content }) => ({ id, title, content })));
-    }
-
-    function chooseNoteAfterSync() {
-      if (notes.length) selectNote(notes.some((note) => note.id === selectedId) ? selectedId : notes[0].id);
-      else {
-        selectedId = null;
-        titleField.contentEditable = "false";
-        contentField.contentEditable = "false";
-        titleField.setAttribute("aria-readonly", "true");
-        contentField.setAttribute("aria-readonly", "true");
-        titleField.textContent = "";
-        contentField.innerHTML = "";
-        setFormattingEnabled(false);
-        renderList();
-      }
-    }
-
-    async function loadPublishedNotes() {
-      if (notes.length) return;
-      try {
-        const response = await fetch("./notes.json", { cache: "no-store" });
-        if (!response.ok) throw new Error(`Published notes could not be loaded (${response.status}).`);
-        const published = await response.json();
-        if (!Array.isArray(published)) throw new Error("Published notes have an invalid format.");
-        notes = published.map(normalizeNote);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
-      } catch (error) {
-        console.error("Could not load published notebook notes.", error);
-        setSyncStatus("Could not load published notes");
-        showToast(error.message);
-      }
-    }
-
-    async function initializeSync() {
-      syncPanel.hidden = false;
-      syncButton.addEventListener("click", () => {
-        if (syncToken) {
-          syncToken = "";
-          syncReady = false;
-          window.clearTimeout(syncTimer);
-          sessionStorage.removeItem(SESSION_KEY);
-          setCanEdit(false);
-          syncButton.textContent = "Connect GitHub";
-          setSyncStatus("Disconnected · read-only");
-          return;
-        }
-        window.location.href = `${syncApi}/api/auth/login`;
-      });
-
-      const fragment = new URLSearchParams(window.location.hash.slice(1));
-      const returnedToken = fragment.get("session");
-      if (returnedToken && /^[a-f0-9]{64}$/.test(returnedToken)) {
-        syncToken = returnedToken;
-        sessionStorage.setItem(SESSION_KEY, returnedToken);
-        history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-      }
-
-      const syncError = new URLSearchParams(window.location.search).get("sync");
-      if (syncError) {
-        const messages = {
-          failed: "GitHub sign-in failed. Please try again.",
-          "wrong-account": "Connect using the configured GitHub account."
-        };
-        showToast(messages[syncError] || "GitHub sign-in failed.");
-        history.replaceState(null, "", window.location.pathname);
-      }
-
-      if (!syncToken) {
-        syncButton.textContent = "Connect GitHub";
-        setCanEdit(false);
-        setSyncStatus("Read-only · connect to edit and sync");
-        await loadPublishedNotes();
-        chooseNoteAfterSync();
-        return;
-      }
-
-      syncButton.textContent = "Disconnect";
-      setSyncStatus("Connecting…");
-      setCanEdit(true);
-      try {
-        const remote = await requestSync("/api/notes");
-        if (!Array.isArray(remote.notes)) throw new Error("GitHub returned an invalid notes list.");
-        const remoteNotes = remote.notes.map(normalizeNote);
-        const merged = mergeNotes(remoteNotes, notes);
-        const remoteFingerprint = JSON.stringify(remoteNotes.map(({ id, title, content }) => ({ id, title, content })));
-        const differs = JSON.stringify(merged.map(({ id, title, content }) => ({ id, title, content }))) !== remoteFingerprint;
-        notes = merged;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
-        lastSyncedFingerprint = remoteFingerprint;
-        syncReady = true;
-        chooseNoteAfterSync();
-        setSyncStatus(remote.pending ? "Queued · publishing on the next minute schedule" : "Connected · no pending changes");
-        if (differs) scheduleSync();
-      } catch (error) {
-        console.error("Could not initialize notebook sync.", error);
-        setSyncStatus("Sync unavailable · browser copy is saved");
-        showToast(error.message);
-      }
-    }
 
   function sanitizeRichText(html) {
     const parsed = new DOMParser().parseFromString(html, "text/html");
@@ -311,7 +98,6 @@
   function saveNotes() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
-      if (syncToken && syncReady) scheduleSync();
       return true;
     } catch (error) {
       console.error("Could not save notebook notes.", error);
@@ -346,7 +132,6 @@
       remove.textContent = "×";
       remove.setAttribute("aria-label", `Delete ${note.title || "untitled note"}`);
       remove.title = "Delete note";
-      remove.hidden = !canEdit;
       remove.addEventListener("click", () => deleteNote(note.id));
 
       row.append(select, remove);
@@ -435,22 +220,21 @@
     const note = notes.find((item) => item.id === id);
     if (!note) return;
     selectedId = id;
-    titleField.contentEditable = String(canEdit);
-    contentField.contentEditable = String(canEdit);
-    titleField.setAttribute("aria-readonly", String(!canEdit));
-    contentField.setAttribute("aria-readonly", String(!canEdit));
+    titleField.contentEditable = "true";
+    contentField.contentEditable = "true";
+    titleField.setAttribute("aria-readonly", "false");
+    contentField.setAttribute("aria-readonly", "false");
     titleField.textContent = note.title;
     contentField.innerHTML = sanitizeRichText(note.content);
     fontFamily.value = "Georgia";
     fontSize.value = "3";
     savedRange = null;
-    setFormattingEnabled(canEdit);
+    setFormattingEnabled(true);
     renderList();
     closeDrawer();
   }
 
   function addNote() {
-    if (!canEdit) return;
     const note = { id: crypto.randomUUID(), title: "Title", content: "", updatedAt: new Date().toISOString() };
     notes.unshift(note);
     if (!saveNotes()) {
@@ -504,7 +288,6 @@
   }
 
   function deleteNote(id) {
-    if (!canEdit) return;
     const note = notes.find((item) => item.id === id);
     if (!note || !window.confirm(`Delete "${note.title || "Untitled"}"? This can't be undone.`)) return;
     const previousNotes = notes;
@@ -592,11 +375,4 @@
   renderList();
   setFormattingEnabled(false);
   if (notes.length) selectNote(notes[0].id);
-  if (syncApi) {
-    initializeSync();
-  } else {
-    loadPublishedNotes().then(() => {
-      if (!selectedId && notes.length) selectNote(notes[0].id);
-    });
-  }
 })();
