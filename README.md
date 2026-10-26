@@ -3,7 +3,7 @@
 A static, responsive notebook made with plain HTML, CSS, and JavaScript. It has
 editable notes, search, formatting and code blocks. The browser saves edits
 immediately. Optional GitHub sync stores a queued snapshot in Cloudflare and
-queues edits after 30 seconds without typing and publishes them to GitHub Pages
+queues edits after one minute without typing and publishes them to GitHub Pages
 on Cloudflare's one-minute schedule.
 
 > **Privacy:** when GitHub sync is enabled, note titles and contents are
@@ -28,11 +28,10 @@ repository.
 ## Enable cross-device GitHub sync
 
 Sync uses a Cloudflare Worker as a small OAuth/API backend. GitHub credentials
-stay in Worker secrets, not in the website. After 30 seconds without typing,
+stay in Worker secrets, not in the website. After one minute without typing,
 the browser queues edits; the Worker commits the latest snapshot and requests a
-Pages deployment on its one-minute schedule. Cloudflare cron cannot run every
-30 seconds. The static site remains usable locally
-without this setup.
+Pages deployment on its one-minute schedule. The static site remains usable
+locally without this setup.
 
 ### 1. Create the Cloudflare KV namespace
 
@@ -115,7 +114,8 @@ other devices; editing requires connecting that account.
 
 - Each edit is saved to browser storage immediately.
 - When connected, the latest full notebook snapshot is sent to Cloudflare after
-  30 seconds without typing.
+  one minute without typing. No sync request is made if the note contents and
+  titles have not changed since the last queued snapshot.
 - Cloudflare retains the queued snapshot and, every minute, commits it to
   `site/notes.json` and dispatches the Pages deployment workflow.
 - A browser closed before the short queue request completes leaves that last

@@ -23,7 +23,7 @@
   const drawerScrim = document.querySelector("#drawer-scrim");
   const toast = document.querySelector("#toast");
   const syncApi = (window.NOTEBOOK_SYNC_API || "").replace(/\/+$/, "");
-  const SYNC_DELAY_MS = 30_000;
+  const SYNC_DELAY_MS = 60_000;
   const syncPanel = document.querySelector("#sync-panel");
   const syncStatus = document.querySelector("#sync-status");
   const syncButton = document.querySelector("#sync-button");
@@ -36,6 +36,7 @@
   let syncToken = sessionStorage.getItem(SESSION_KEY) || "";
   let syncTimer;
   let syncReady = false;
+  let lastSyncedFingerprint = null;
   let canEdit = !syncApi;
 
   function loadNotes() {
@@ -123,6 +124,7 @@
           syncToken = "";
           sessionStorage.removeItem(SESSION_KEY);
           syncReady = false;
+          window.clearTimeout(syncTimer);
           setCanEdit(false);
           syncButton.textContent = "Connect GitHub";
           syncStatus.textContent = "Session expired. Connect again to edit.";
@@ -137,22 +139,37 @@
     }
 
     function scheduleSync() {
+      const fingerprint = notesFingerprint();
+      if (fingerprint === lastSyncedFingerprint) {
+        window.clearTimeout(syncTimer);
+        setSyncStatus("Connected · no pending changes");
+        return;
+      }
+
       window.clearTimeout(syncTimer);
-      setSyncStatus("Saving sync snapshot…");
+      setSyncStatus("Saved here · sync in 1 minute if unchanged");
       syncTimer = window.setTimeout(async () => {
+        const latestFingerprint = notesFingerprint();
+        if (latestFingerprint === lastSyncedFingerprint) return;
+
         try {
           await requestSync("/api/notes", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ notes })
           });
-          setSyncStatus("Queued · GitHub publishes every minute");
+          lastSyncedFingerprint = latestFingerprint;
+          setSyncStatus("Queued · publishing on the next minute schedule");
         } catch (error) {
           console.error("Could not queue notebook sync.", error);
           setSyncStatus("Sync failed · your browser copy is saved");
           showToast(error.message);
         }
       }, SYNC_DELAY_MS);
+    }
+
+    function notesFingerprint() {
+      return JSON.stringify(notes.map(({ id, title, content }) => ({ id, title, content })));
     }
 
     function chooseNoteAfterSync() {
@@ -192,6 +209,7 @@
         if (syncToken) {
           syncToken = "";
           syncReady = false;
+          window.clearTimeout(syncTimer);
           sessionStorage.removeItem(SESSION_KEY);
           setCanEdit(false);
           syncButton.textContent = "Connect GitHub";
@@ -234,13 +252,16 @@
       try {
         const remote = await requestSync("/api/notes");
         if (!Array.isArray(remote.notes)) throw new Error("GitHub returned an invalid notes list.");
-        const merged = mergeNotes(remote.notes, notes);
-        const differs = JSON.stringify(merged) !== JSON.stringify(remote.notes.map(normalizeNote));
+        const remoteNotes = remote.notes.map(normalizeNote);
+        const merged = mergeNotes(remoteNotes, notes);
+        const remoteFingerprint = JSON.stringify(remoteNotes.map(({ id, title, content }) => ({ id, title, content })));
+        const differs = JSON.stringify(merged.map(({ id, title, content }) => ({ id, title, content }))) !== remoteFingerprint;
         notes = merged;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+        lastSyncedFingerprint = remoteFingerprint;
         syncReady = true;
         chooseNoteAfterSync();
-        setSyncStatus(remote.pending ? "Queued · GitHub publishes every minute" : "Connected · notes are published");
+        setSyncStatus(remote.pending ? "Queued · publishing on the next minute schedule" : "Connected · no pending changes");
         if (differs) scheduleSync();
       } catch (error) {
         console.error("Could not initialize notebook sync.", error);
@@ -465,9 +486,12 @@
     if (!note) return;
     const previousTitle = note.title;
     const previousContent = note.content;
+    const nextTitle = noteText(titleField).replace(/\n+/g, " ").trim();
+    const nextContent = sanitizeRichText(contentField.innerHTML);
+    if (nextTitle === previousTitle && nextContent === previousContent) return;
     const previousUpdatedAt = note.updatedAt;
-    note.title = noteText(titleField).replace(/\n+/g, " ").trim();
-    note.content = sanitizeRichText(contentField.innerHTML);
+    note.title = nextTitle;
+    note.content = nextContent;
     note.updatedAt = new Date().toISOString();
     if (!saveNotes()) {
       note.title = previousTitle;
